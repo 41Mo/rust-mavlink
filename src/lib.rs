@@ -503,10 +503,10 @@ impl MAVLinkV2MessageRaw {
             .copy_from_slice(&crc.to_le_bytes());
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&mut self) -> &mut [u8] {
         let pl: usize = self.payload_length().into();
         let len = 1+Self::HEADER_SIZE+pl+2;
-        &self.0[..len]
+        &mut self.0[..len]
     }
 }
 
