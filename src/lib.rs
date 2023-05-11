@@ -502,6 +502,12 @@ impl MAVLinkV2MessageRaw {
         self.0[(1 + Self::HEADER_SIZE + payload_len)..(1 + Self::HEADER_SIZE + payload_len + 2)]
             .copy_from_slice(&crc.to_le_bytes());
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        let pl: usize = self.payload_length().into();
+        let len = 1+Self::HEADER_SIZE+pl+2;
+        &self.0[..len]
+    }
 }
 
 /// Return a raw buffer with the mavlink message
