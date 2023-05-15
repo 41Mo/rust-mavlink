@@ -210,7 +210,7 @@ pub fn read_versioned_msg<M: Message, R: Read>(
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 // Follow protocol definition: https://mavlink.io/en/guide/serialization.html#v1_packet_format
-pub struct MAVLinkV1MessageRaw([u8; 1 + Self::HEADER_SIZE + 255 + 2]);
+pub struct MAVLinkV1MessageRaw(pub [u8; 1 + Self::HEADER_SIZE + 255 + 2]);
 
 impl Default for MAVLinkV1MessageRaw {
     fn default() -> Self {
@@ -316,6 +316,12 @@ impl MAVLinkV1MessageRaw {
         self.0[(1 + Self::HEADER_SIZE + payload_len)..(1 + Self::HEADER_SIZE + payload_len + 2)]
             .copy_from_slice(&crc.to_le_bytes());
     }
+
+    pub fn as_bytes(&mut self) -> &mut [u8] {
+        let pl: usize = self.payload_length().into();
+        let len = 1+Self::HEADER_SIZE+pl+2;
+        &mut self.0[..len]
+    }
 }
 
 /// Return a raw buffer with the mavlink message
@@ -372,7 +378,7 @@ const MAVLINK_IFLAG_SIGNED: u8 = 0x01;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 // Follow protocol definition: https://mavlink.io/en/guide/serialization.html#mavlink2_packet_format
-pub struct MAVLinkV2MessageRaw([u8; 1 + Self::HEADER_SIZE + 255 + 2 + Self::SIGNATURE_SIZE]);
+pub struct MAVLinkV2MessageRaw(pub [u8; 1 + Self::HEADER_SIZE + 255 + 2 + Self::SIGNATURE_SIZE]);
 
 impl Default for MAVLinkV2MessageRaw {
     fn default() -> Self {
@@ -394,7 +400,7 @@ impl MAVLinkV2MessageRaw {
     }
 
     #[inline]
-    fn mut_header(&mut self) -> &mut [u8] {
+    pub fn mut_header(&mut self) -> &mut [u8] {
         &mut self.0[1..=Self::HEADER_SIZE]
     }
 
@@ -556,6 +562,30 @@ pub fn read_v2_msg<M: Message, R: Read>(
             .map_err(|err| err.into());
     }
 }
+
+pub fn deserialize_v1_msg<M: Message>(
+    message: &mut MAVLinkV1MessageRaw
+) -> Result<(MavHeader, M), ()> {
+        if !message.has_valid_crc::<M>() {
+            // bad crc: ignore message
+            return Err(())
+        }
+
+        return M::parse(MavlinkVersion::V1, message.message_id().into(), message.payload())
+            .map(|msg| {
+                (
+                    MavHeader {
+                        sequence: message.sequence(),
+                        system_id: message.system_id(),
+                        component_id: message.component_id(),
+                    },
+                    msg,
+                )
+            })
+            .map_err(|_| ());
+}
+
+
 
 /// Write a message using the given mavlink version
 pub fn write_versioned_msg<M: Message, W: Write>(
